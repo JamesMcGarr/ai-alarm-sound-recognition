@@ -1,0 +1,2 @@
+# This directory contains .wav files of background / non-alarm sounds (label = 0).
+# Populate by running: python train.py --collect

@@ -1,0 +1,1 @@
+arecord -D plughw:2,0 -f cd -d 5 sample.wav

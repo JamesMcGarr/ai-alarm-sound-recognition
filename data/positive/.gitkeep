@@ -1,0 +1,2 @@
+# This directory contains .wav files of the X-Sense alarm sound (label = 1).
+# Populate by running: python train.py --collect
