@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import os
 import sys
 from pathlib import Path
@@ -44,8 +43,6 @@ sys.path.insert(0, str(_ROOT))
 from dotenv import load_dotenv
 
 load_dotenv()
-
-from src.logging_config import setup_logging
 
 # ── ANSI colours ──────────────────────────────────────────────────────────────
 _GREEN = "\033[32m"
@@ -264,8 +261,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
-    setup_logging("logs/scripts.log")
 
     # Resolve model path without importing src.training.trainer — that module
     # chains through src.audio.capture which queries the audio device at import
