@@ -10,6 +10,7 @@ The device name/index can be overridden via AUDIO_DEVICE env var or the
 
 from __future__ import annotations
 
+import os
 import queue
 import threading
 from collections.abc import Generator
@@ -20,15 +21,12 @@ import sounddevice as sd
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 DEVICE_INDEX: int = 0          # USB PnP Sound Device (hw:2,0) – index 0 in sounddevice
+DEFAULT_SAMPLE_RATE: int = 44100
 
+# Read from env var so you can override for a different microphone without
+# changing code.  Run scripts/check_sample_rate.py to discover the right value.
+SAMPLE_RATE: int = int(os.environ.get("SAMPLE_RATE", DEFAULT_SAMPLE_RATE))
 
-def get_sample_rate(device_index: int | None = None) -> int:
-    """Query the device's native sample rate rather than hardcoding one."""
-    info = sd.query_devices(device_index, kind="input")
-    return int(info["default_samplerate"])
-
-
-SAMPLE_RATE: int = get_sample_rate(DEVICE_INDEX)
 WINDOW_SECONDS: float = 1.0    # duration of each audio window
 HOP_SECONDS: float = 0.5       # overlap step between windows
 CHANNELS: int = 1
@@ -60,9 +58,7 @@ class AudioCapture:
         window_seconds: float = WINDOW_SECONDS,
         hop_seconds: float = HOP_SECONDS,
     ) -> None:
-        import os
-
-        self.device = device or os.environ.get("AUDIO_DEVICE")
+        self.device = device if device is not None else os.environ.get("AUDIO_DEVICE")
         self.sample_rate = sample_rate
         self.window_size = int(window_seconds * sample_rate)
         self.hop_size = int(hop_seconds * sample_rate)

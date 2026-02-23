@@ -42,3 +42,9 @@ Thumbs.db
 # Misc audio artefacts
 *.wav.bak
 sample.wav
+
+# Log files
+logs/
+
+# Environment / secrets
+.env

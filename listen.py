@@ -25,6 +25,10 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
+
+from src.logging_config import setup_logging
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -77,10 +81,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
-    logging.basicConfig(
+    setup_logging(
+        log_file="logs/listen.log",
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s  %(levelname)-8s  %(message)s",
-        datefmt="%H:%M:%S",
     )
 
     from src.inference.listener import AlarmListener
@@ -102,16 +105,30 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             pass  # keep as string name
 
+    # ── Tapo siren (optional) ─────────────────────────────────────────────────
+    siren = None
+    try:
+        from src.siren.controller import SirenController
+        siren = SirenController()
+    except ImportError:
+        logging.warning("tapo package not installed — siren control disabled.")
+    except ValueError as e:
+        logging.warning("Siren control disabled: %s", e)
+    except Exception as e:
+        logging.warning("Could not connect to Tapo device: %s", e)
+
     listener = AlarmListener(
         model_path=model_path,
         device=device,
         detection_threshold=args.threshold,
         save_triggers=args.save_triggers,
         save_negatives=args.save_negatives,
+        siren=siren,
     )
 
     logging.info("Model loaded from %s", model_path)
     logging.info("Detection threshold: %.2f", args.threshold)
+    logging.info("Siren control: %s", "enabled" if siren else "disabled")
     listener.run()
     return 0
 

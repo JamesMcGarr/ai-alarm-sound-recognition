@@ -14,7 +14,7 @@ Usage (from project root):
 
 from __future__ import annotations
 
-import sys
+import logging
 import time
 from pathlib import Path
 
@@ -22,6 +22,8 @@ import numpy as np
 import scipy.io.wavfile as wavfile
 
 from src.audio.capture import AudioCapture, SAMPLE_RATE
+
+logger = logging.getLogger(__name__)
 
 # ── directories ───────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,9 +81,9 @@ def collect_samples(
     already_negative = len(list(NEGATIVE_DIR.glob("negative_*.wav")))
 
     if already_positive:
-        print(f"Found {already_positive} existing positive samples.")
+        logger.info("Found %d existing positive samples.", already_positive)
     if already_negative:
-        print(f"Found {already_negative} existing negative samples.")
+        logger.info("Found %d existing negative samples.", already_negative)
 
     # ── Positive samples ──────────────────────────────────────────────────────
     remaining_positive = n_positive
@@ -90,14 +92,13 @@ def collect_samples(
             f"POSITIVE samples ({remaining_positive} clips × {CLIP_DURATION}s).\n"
             "  Trigger your X-Sense alarm so it is actively sounding."
         )
-        print(f"Recording {remaining_positive} positive clips …")
+        logger.info("Recording %d positive clips …", remaining_positive)
         for i in range(remaining_positive):
             path = _next_filename(POSITIVE_DIR, "positive")
             audio = capture.record_clip(CLIP_DURATION)
             _save_wav(audio, path)
-            sys.stdout.write(f"\r  [{i + 1}/{remaining_positive}]  saved → {path.name}")
-            sys.stdout.flush()
-        print(f"\n  Done. {remaining_positive} positive clips saved to {POSITIVE_DIR}")
+            logger.debug("  [%d/%d]  saved → %s", i + 1, remaining_positive, path.name)
+        logger.info("Done. %d positive clips saved to %s", remaining_positive, POSITIVE_DIR)
 
     # ── Negative samples ──────────────────────────────────────────────────────
     remaining_negative = n_negative
@@ -107,21 +108,19 @@ def collect_samples(
             "  Let the alarm stop.  Make normal ambient background sounds\n"
             "  (speech, footsteps, TV, silence, etc.) during recording."
         )
-        print(f"Recording {remaining_negative} negative clips …")
+        logger.info("Recording %d negative clips …", remaining_negative)
         for i in range(remaining_negative):
             path = _next_filename(NEGATIVE_DIR, "negative")
             audio = capture.record_clip(CLIP_DURATION)
             _save_wav(audio, path)
-            sys.stdout.write(f"\r  [{i + 1}/{remaining_negative}]  saved → {path.name}")
-            sys.stdout.flush()
-        print(f"\n  Done. {remaining_negative} negative clips saved to {NEGATIVE_DIR}")
+            logger.debug("  [%d/%d]  saved → %s", i + 1, remaining_negative, path.name)
+        logger.info("Done. %d negative clips saved to %s", remaining_negative, NEGATIVE_DIR)
 
     total_pos = len(list(POSITIVE_DIR.glob("positive_*.wav")))
     total_neg = len(list(NEGATIVE_DIR.glob("negative_*.wav")))
-    print(
-        f"\nCollection complete.\n"
-        f"  Positive samples: {total_pos}\n"
-        f"  Negative samples: {total_neg}\n"
+    logger.info(
+        "Collection complete. Positive samples: %d  |  Negative samples: %d",
+        total_pos, total_neg,
     )
 
 

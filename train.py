@@ -31,12 +31,8 @@ import argparse
 import logging
 import sys
 
+from src.logging_config import setup_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -89,6 +85,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    setup_logging("logs/train.log")
     args = parse_args(argv)
 
     do_collect = not args.train_only   # collect unless --train flag given
@@ -112,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Best validation accuracy: %.2f%%", best_acc * 100)
         if best_acc < 0.99:
             logger.warning(
-                "Accuracy target (99%%) not yet met. "
+                "Accuracy target (99%) not yet met. "
                 "Record more samples and re-run: python train.py --collect"
             )
             return 1

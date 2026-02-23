@@ -17,7 +17,7 @@ from __future__ import annotations
 import datetime
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import scipy.io.wavfile as wavfile
@@ -26,6 +26,9 @@ from src.audio.capture import AudioCapture, SAMPLE_RATE
 from src.audio.features import extract
 from src.training.model import AlarmCNN, DETECTION_THRESHOLD
 from src.training.trainer import load_model
+
+if TYPE_CHECKING:
+    from src.siren.controller import SirenController
 
 logger = logging.getLogger(__name__)
 
@@ -58,25 +61,53 @@ def _rms(audio: np.ndarray) -> float:
     return float(np.sqrt(np.mean(audio ** 2)))
 
 
-# ── TODO stub ─────────────────────────────────────────────────────────────────
+# ── Alarm callbacks ───────────────────────────────────────────────────────────
 
-def on_alarm_detected(audio_window: np.ndarray, confidence: float) -> None:
+def on_alarm_detected(
+    audio_window: np.ndarray,
+    confidence: float,
+    siren: "SirenController | None" = None,
+) -> None:
     """
     Called every time the model detects the X-Sense alarm sound.
 
-    TODO: Implement the desired response here.
+    Turns the Tapo siren plug ON (only if it isn't already on).
 
     Parameters
     ----------
     audio_window:
-        The raw audio frame (float32 numpy array, 1 second at 22 050 Hz)
-        that triggered the detection.
+        The raw audio frame that triggered the detection.
     confidence:
-        The model's output probability (0–1).  Will always be ≥
-        DETECTION_THRESHOLD (0.99) when this function is called.
+        The model's output probability (≥ DETECTION_THRESHOLD).
+    siren:
+        Optional SirenController instance.  If provided, turns the siren on.
     """
-    # Placeholder – replace with your real response logic.
     logger.info("🔔  ALARM DETECTED  (confidence=%.4f)", confidence)
+    if siren is not None:
+        siren.turn_on()
+
+
+def on_alarm_not_detected(
+    audio_window: np.ndarray,
+    confidence: float,
+    siren: "SirenController | None" = None,
+) -> None:
+    """
+    Called for every audio window that does NOT trigger an alarm detection.
+
+    Turns the Tapo siren plug OFF (only if it isn't already off).
+
+    Parameters
+    ----------
+    audio_window:
+        The raw audio frame that was analysed.
+    confidence:
+        The model's output probability (< DETECTION_THRESHOLD).
+    siren:
+        Optional SirenController instance.  If provided, turns the siren off.
+    """
+    if siren is not None:
+        siren.turn_off()
 
 
 # ── Main listener ─────────────────────────────────────────────────────────────
@@ -107,12 +138,14 @@ class AlarmListener:
         detection_threshold: float = DETECTION_THRESHOLD,
         save_triggers: bool = True,
         save_negatives: bool = True,
+        siren: "SirenController | None" = None,
     ) -> None:
         self.model = load_model(model_path) if model_path else load_model()
         self.capture = AudioCapture(device=device)
         self.threshold = detection_threshold
         self.save_triggers = save_triggers
         self.save_negatives = save_negatives
+        self.siren = siren
 
         if save_triggers:
             POSITIVE_CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -141,12 +174,13 @@ class AlarmListener:
         confidence = self.model.predict_proba(spec)
 
         if confidence >= self.threshold:
-            on_alarm_detected(window, confidence)
+            on_alarm_detected(window, confidence, siren=self.siren)
             if self.save_triggers:
                 path = POSITIVE_CAPTURES_DIR / f"trigger_{_timestamp()}.wav"
                 _save_wav(window, path)
                 logger.debug("Saved trigger → %s", path.name)
         else:
+            on_alarm_not_detected(window, confidence, siren=self.siren)
             rms = _rms(window)
             if (
                 self.save_negatives

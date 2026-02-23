@@ -9,6 +9,7 @@ MAX_EPOCHS is exhausted.  The best model is saved to models/alarm_model.pt.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Tuple
 
@@ -18,6 +19,8 @@ from torch.utils.data import DataLoader
 
 from src.training.dataset import AlarmDataset, make_splits
 from src.training.model import AlarmCNN
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = ROOT / "models"
@@ -70,10 +73,10 @@ def train(
 
     # ── Dataset ───────────────────────────────────────────────────────────────
     full_dataset = AlarmDataset(augment=True)
-    print(full_dataset.summary())
+    logger.info("%s", full_dataset.summary())
 
     train_ds, val_ds = make_splits(full_dataset, TRAIN_FRACTION)
-    print(f"Train: {len(train_ds)} samples  |  Val: {len(val_ds)} samples")
+    logger.info("Train: %d samples  |  Val: %d samples", len(train_ds), len(val_ds))
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, drop_last=False)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
@@ -91,9 +94,9 @@ def train(
     best_val_acc: float = 0.0
     best_epoch: int = 0
 
-    print(f"\nTraining on {device}  (target val accuracy: {target_accuracy * 100:.0f}%)\n")
-    print(f"{'Epoch':>6}  {'Train loss':>11}  {'Train acc':>10}  {'Val acc':>8}")
-    print("-" * 44)
+    logger.info("Training on %s  (target val accuracy: %.0f%%)", device, target_accuracy * 100)
+    logger.info("%s", f"{'Epoch':>6}  {'Train loss':>11}  {'Train acc':>10}  {'Val acc':>8}")
+    logger.info("%s", "-" * 44)
 
     for epoch in range(1, n_epochs + 1):
         # ── train ─────────────────────────────────────────────────────────────
@@ -125,7 +128,7 @@ def train(
 
         scheduler.step(val_acc)
 
-        print(f"{epoch:>6}  {train_loss:>11.4f}  {train_acc:>9.1%}  {val_acc:>7.1%}")
+        logger.info("%s", f"{epoch:>6}  {train_loss:>11.4f}  {train_acc:>9.1%}  {val_acc:>7.1%}")
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
@@ -133,23 +136,23 @@ def train(
             torch.save(model.state_dict(), MODEL_PATH)
 
         if val_acc >= target_accuracy:
-            print(
-                f"\n✓ Target accuracy {target_accuracy * 100:.0f}% reached at epoch {epoch}."
-                f"  Model saved to {MODEL_PATH}"
+            logger.info(
+                "Target accuracy %.0f%% reached at epoch %d.  Model saved to %s",
+                target_accuracy * 100, epoch, MODEL_PATH,
             )
-            break
+            # break
     else:
-        print(
-            f"\nTraining finished after {n_epochs} epochs. "
-            f"Best val accuracy: {best_val_acc * 100:.2f}% (epoch {best_epoch})."
+        logger.info(
+            "Training finished after %d epochs. Best val accuracy: %.2f%% (epoch %d).",
+            n_epochs, best_val_acc * 100, best_epoch,
         )
         if best_val_acc < target_accuracy:
-            print(
-                "  Accuracy target not yet reached.\n"
+            logger.warning(
+                "Accuracy target not yet reached.\n"
                 "  Tip: record more samples with:  python train.py --collect\n"
                 "  Then re-run training:           python train.py --train"
             )
-        print(f"  Best model saved to {MODEL_PATH}")
+        logger.info("Best model saved to %s", MODEL_PATH)
 
     return model, best_val_acc
 
