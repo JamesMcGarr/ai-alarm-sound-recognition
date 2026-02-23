@@ -11,12 +11,15 @@ dependencies = [
     "numpy (>=2.4.2,<3.0.0)",
     "torch (>=2.2.0)",
     "torchaudio (>=2.2.0)",
-    "scipy (>=1.13.0)"
+    "scipy (>=1.13.0)",
+    "tapo (>=0.8.10)",
+    "python-dotenv (>=1.2.1)"
 ]
 
 [dependency-groups]
 dev = [
     "pytest (>=9.0.2,<10.0.0)",
+    "debugpy (>=1.8.20)",
     "flake8 (>=7.3.0,<8.0.0)"
 ]
 
