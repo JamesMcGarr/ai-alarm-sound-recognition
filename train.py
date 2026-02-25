@@ -107,9 +107,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("=== Model Training ===")
         _model, best_acc = train(n_epochs=args.epochs)
         logger.info("Best validation accuracy: %.2f%%", best_acc * 100)
-        if best_acc < 0.99:
+        if best_acc < 0.999:
             logger.warning(
-                "Accuracy target (99%) not yet met. "
+                "Accuracy target (99.9%) not yet met. "
                 "Record more samples and re-run: python train.py --collect"
             )
             return 1

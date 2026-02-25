@@ -19,9 +19,11 @@ USB mic
   └─ AudioCapture (sounddevice, 22 050 Hz, 1-second windows, 0.5 s hop)
        └─ features.extract() → log-mel-spectrogram tensor (1 × 64 × T)
             └─ AlarmCNN.predict_proba()
-                 ├─ ≥ 0.99 → on_alarm_detected() + save to data/positive_captures/
-                 └─ < 0.99 (but interesting) → save to data/negative_captures/
+                 ├─ ≥ 0.999 → on_alarm_detected() + save to data/positive_captures/
+                 └─ < 0.999 (but interesting) → save to data/negative_captures/
 ```
+
+**Want to learn how this works?**  See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) for a beginner-friendly guide to every AI/ML concept used in this project — from audio feature extraction and neural networks to training, inference, and the continuous improvement loop.
 
 ---
 
@@ -130,7 +132,7 @@ def on_alarm_detected(audio_window: np.ndarray, confidence: float) -> None:
 | Flag | Description |
 |---|---|
 | `--device INDEX\|NAME` | sounddevice device index or name fragment |
-| `--threshold FLOAT` | Detection confidence threshold (default: 0.99) |
+| `--threshold FLOAT` | Detection confidence threshold (default: 0.999) |
 | `--model PATH` | Path to a `.pt` model file (default: `models/alarm_model.pt`) |
 | `--no-save-triggers` | Disable saving alarm triggers to `data/positive_captures/` |
 | `--no-save-negatives` | Disable saving interesting non-alarm frames to `data/negative_captures/` |

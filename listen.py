@@ -12,7 +12,7 @@ Usage
 Options
 -------
 --device INDEX|NAME   sounddevice device index or name fragment.
---threshold FLOAT     Detection confidence threshold (default: 0.99).
+--threshold FLOAT     Detection confidence threshold (default: 0.999).
 --no-save-triggers    Do not save triggering frames to data/positive_captures/.
 --no-save-negatives   Do not save interesting non-alarm frames to data/negative_captures/.
 --model PATH          Override path to the trained .pt model file.
@@ -44,9 +44,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--threshold",
         type=float,
-        default=0.99,
+        default=0.999,
         metavar="FLOAT",
-        help="Detection confidence threshold (default: 0.99).",
+        help="Detection confidence threshold (default: 0.999).",
     )
     p.add_argument(
         "--no-save-triggers",

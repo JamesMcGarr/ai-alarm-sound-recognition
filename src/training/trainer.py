@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = ROOT / "models"
 MODEL_PATH = MODELS_DIR / "alarm_model.pt"
 
-TARGET_ACCURACY: float = 0.99
+TARGET_ACCURACY: float = 0.999
 MAX_EPOCHS: int = 200
 BATCH_SIZE: int = 16
 LEARNING_RATE: float = 1e-3

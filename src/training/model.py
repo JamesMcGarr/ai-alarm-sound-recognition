@@ -11,7 +11,7 @@ Architecture:
     Flatten → Linear(128×4×4 → 256) → ReLU → Dropout(0.3)
     Linear(256 → 1) → Sigmoid
 
-Output: scalar in [0, 1].  Values ≥ 0.99 are treated as "alarm detected".
+Output: scalar in [0, 1].  Values ≥ 0.999 are treated as "alarm detected".
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 
-DETECTION_THRESHOLD: float = 0.99  # confidence required to fire the alarm event
+DETECTION_THRESHOLD: float = 0.999  # confidence required to fire the alarm event
 
 
 class AlarmCNN(nn.Module):
