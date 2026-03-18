@@ -12,7 +12,7 @@ The app is split into three logical modules:
 | `src/training/` | Sample collection, dataset, model definition, training loop |
 | `src/inference/` | Live inference loop and alarm callback |
 
-**Architecture:** A compact CNN (`AlarmCNN`, ~618k parameters) classifies 1-second overlapping audio windows as *alarm* or *not alarm*.  Each window is converted to a 64-band log-mel-spectrogram before being fed into the model.  The model fires when confidence ≥ **99%**.
+**Architecture:** A compact CNN (`AlarmCNN`, ~618k parameters) classifies 1-second overlapping audio windows as *alarm* or *not alarm*.  Each window is converted to a 64-band log-mel-spectrogram before being fed into the model.  The model fires when confidence ≥ **99.9%**.
 
 ```
 USB mic
@@ -50,7 +50,10 @@ USB mic
 │   ├── positive_captures/      # Alarm triggers saved during inference
 │   └── negative_captures/      # Interesting non-alarm frames saved during inference
 ├── models/
-│   └── alarm_model.pt          # Saved model weights (created after training)
+│   ├── alarm_model.pt          # Symlink → latest dated model
+│   ├── alarm_model_YYYY-MM-DD.pt       # Saved model weights
+│   ├── alarm_model_YYYY-MM-DD_meta.json # Training metadata
+│   └── archive/                # Previous models + metadata
 ├── tests/
 │   ├── test_features.py
 │   ├── test_dataset.py
@@ -91,7 +94,7 @@ This runs the full workflow:
 
 1. **Positive samples** — you are prompted to trigger your X-Sense alarm.  The app records 60 one-second clips and saves them to `data/positive/`.
 2. **Negative samples** — you are prompted to let the alarm stop.  The app records 60 clips of ambient background sounds and saves them to `data/negative/`.
-3. **Training** — the model trains until validation accuracy reaches 99%, then saves weights to `models/alarm_model.pt`.
+3. **Training** — the model trains until validation accuracy reaches 99.9%, then saves a dated model (e.g. `models/alarm_model_2026-03-17.pt`) and updates the `models/alarm_model.pt` symlink.
 
 #### Flags
 
@@ -104,7 +107,7 @@ This runs the full workflow:
 | `--epochs N` | Maximum training epochs (default: 200) |
 | `--device INDEX\|NAME` | sounddevice device index or name fragment |
 
-If 99% accuracy is not reached, record more samples with `python train.py --collect` and retrain with `python train.py --train`.
+If 99.9% accuracy is not reached, record more samples with `python train.py --collect` and retrain with `python train.py --train`.
 
 ---
 
@@ -114,7 +117,7 @@ If 99% accuracy is not reached, record more samples with `python train.py --coll
 python listen.py
 ```
 
-Loads `models/alarm_model.pt` and streams audio continuously.  When the alarm is detected at ≥ 99% confidence, `on_alarm_detected()` is called.
+Loads `models/alarm_model.pt` and streams audio continuously.  When the alarm is detected at ≥ 99.9% confidence, `on_alarm_detected()` is called.
 
 #### Implement your response
 
@@ -144,7 +147,7 @@ def on_alarm_detected(audio_window: np.ndarray, confidence: float) -> None:
 
 During live inference the app automatically saves:
 
-- **`data/positive_captures/`** — every window that triggers the alarm at ≥ 99% confidence.
+- **`data/positive_captures/`** — every window that triggers the alarm at ≥ 99.9% confidence.
 - **`data/negative_captures/`** — non-silent, interesting windows that scored below the threshold (useful hard negatives).
 
 Copy these into the training directories and retrain:
@@ -171,6 +174,16 @@ List available devices:
 ```bash
 python -c "import sounddevice; print(sounddevice.query_devices())"
 ```
+
+---
+
+## Privacy
+
+The trained model (`.pt` file) and its metadata (`.json`) are version controlled so others can use this project without re-recording samples and retraining from scratch.
+
+**Are my recordings recoverable from the model?** No. The `.pt` file contains only ~618k learned weight values — abstract numbers representing patterns, not audio. While *model inversion attacks* are a known area of ML research, extracting meaningful audio from a small binary CNN like `AlarmCNN` is not practically feasible. At best an attacker could recover a vague spectral pattern ("something that sweeps between certain frequencies"), not intelligible speech or identifiable home sounds. The risk is accepted.
+
+The metadata JSON includes the **filenames** of the training clips (e.g. `data/positive/positive_0001.wav`) but **not their audio content**. The actual `.wav` files in `data/` are git-ignored and never committed.
 
 ---
 

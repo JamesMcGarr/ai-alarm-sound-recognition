@@ -421,9 +421,64 @@ The dataset is split 80% train / 20% validation:
 
 If training accuracy is 99% but validation accuracy is 60%, the model has **overfit** — it memorised the training clips instead of learning the real pattern.
 
+### Reading the training log
+
+Each epoch prints three numbers. Here is a representative line from a real run:
+
+```
+Epoch  3/20 | train_loss=0.0234  train_acc=98.43%  val_acc=100.00% ✓ saved
+```
+
+| Metric | Where it comes from | What it tells you |
+|---|---|---|
+| **train_loss** | Average BCE error across all training batches | How confident and correct the model is on data it *has learned from*. Lower is better; 0.0 would be perfect. |
+| **train_acc** | % of training clips classified correctly | The model's score on its own "homework". High early in training is normal; very high very fast may mean the model is memorising. |
+| **val_acc** | % of validation clips classified correctly | The model's score on data it has *never seen*. This is the honest measure of whether learning has actually generalised. |
+
+The `✓ saved` marker means this epoch produced the best `val_acc` so far and the model was checkpointed.
+
+**How to interpret the relationship between the three numbers:**
+
+| Scenario | Typical numbers | What it means |
+|---|---|---|
+| Both train and val accuracy are high | train 99%, val 99% | ✅ Model is learning real patterns |
+| Train high, val much lower | train 99%, val 60% | ⚠️ Overfitting — memorised training data; needs more varied samples or dropout |
+| Both low | train 60%, val 58% | ⚠️ Underfitting — model isn't learning; may need more epochs or a larger model |
+| Val higher than train | train 92%, val 97% | Normal early in training when the val set happens to be easier; usually resolves after more epochs |
+
+Loss and accuracy move in opposite directions: as the model improves, loss goes down and accuracy goes up. If you see loss going *up* while accuracy goes *up*, something is wrong (this rarely happens with a well-configured run).
+
 ### Early stopping and model checkpointing
 
-Training stops automatically when validation accuracy reaches `TARGET_ACCURACY = 0.999` (99.9%). The best model seen during training is saved to `models/alarm_model.pt` whenever validation accuracy improves. This means even if the model momentarily worsens, you keep the best version.
+Training stops automatically when validation accuracy reaches `TARGET_ACCURACY = 0.999` (99.9%). The best model seen during training is saved as a dated file (e.g. `models/alarm_model_2026-03-17.pt`) whenever validation accuracy improves. A symlink `models/alarm_model.pt` always points to the latest model so the listener works without reconfiguration.
+
+### Model metadata
+
+Each training run produces a companion JSON file (e.g. `models/alarm_model_2026-03-17_meta.json`) alongside the model weights. This metadata captures everything needed to reproduce or compare models:
+
+| Category | Example fields |
+|---|---|
+| **Identity** | `model_filename`, `created_date` |
+| **Training** | `epochs`, `best_epoch`, `training_duration_seconds`, `target_accuracy_reached` |
+| **Data** | `training_samples.total`, `.positive`, `.negative`, `.positive_files`, `.negative_files` |
+| **Performance** | `val_accuracy`, `val_loss`, `precision`, `recall`, `f1`, `false_positive_rate`, `false_negative_rate` |
+| **Config** | `learning_rate`, `batch_size`, `optimizer`, `loss_function`, `scheduler`, `train_val_split` |
+| **Features** | `sample_rate`, `n_mels`, `n_fft`, `hop_length`, `f_min`, `f_max`, `clip_duration_seconds` |
+| **Architecture** | `name`, `detection_threshold`, `total_parameters` |
+| **Environment** | `python_version`, `torch_version`, `platform` |
+| **Free text** | `notes` — editable after training to record context like *"added kitchen samples"* |
+
+### Archiving models
+
+When you train a new model, archive the previous one by copying both files into a dated folder:
+
+```bash
+mkdir -p models/archive/2026-03-17
+mv models/alarm_model_2026-03-17.pt models/archive/2026-03-17/
+mv models/alarm_model_2026-03-17_meta.json models/archive/2026-03-17/
+```
+
+The dated folder name matches the model filename, making it easy to find later. Comparing the metadata JSON files between two models reveals exactly what changed — more samples, different hyperparameters, or a different environment.
 
 <details>
 <summary>🔬 Deep Dive: Learning rate scheduling, data augmentation, and why 99.9% is the target</summary>

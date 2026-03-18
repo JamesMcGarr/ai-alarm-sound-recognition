@@ -3,9 +3,6 @@
 venv/
 env/
 
-# Trained model weights
-models/*.pt
-
 # Collected training data (keep directory structure, ignore audio files)
 data/positive/*.wav
 data/negative/*.wav

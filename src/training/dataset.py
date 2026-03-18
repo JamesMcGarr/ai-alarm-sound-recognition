@@ -102,6 +102,23 @@ class AlarmDataset(Dataset):
     def n_negative(self) -> int:
         return sum(1 for _, l in self._items if l == 0)
 
+    @property
+    def file_paths(self) -> dict[str, list[str]]:
+        """Return positive and negative file paths relative to project root."""
+        root = Path(__file__).resolve().parents[2]
+        positive: list[str] = []
+        negative: list[str] = []
+        for p, label in self._items:
+            try:
+                rel = str(p.relative_to(root))
+            except ValueError:
+                rel = str(p)
+            if label == 1:
+                positive.append(rel)
+            else:
+                negative.append(rel)
+        return {"positive": sorted(positive), "negative": sorted(negative)}
+
     def summary(self) -> str:
         return (
             f"AlarmDataset: {len(self)} samples  "

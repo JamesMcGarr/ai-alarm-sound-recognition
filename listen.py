@@ -3,7 +3,7 @@ listen.py
 ---------
 Entrypoint for live inference.  Loads the trained model and continuously
 analyses audio from the USB microphone, calling on_alarm_detected() whenever
-the X-Sense alarm is recognised with ≥ 99% confidence.
+the X-Sense alarm is recognised with ≥ 99.9% confidence.
 
 Usage
 -----

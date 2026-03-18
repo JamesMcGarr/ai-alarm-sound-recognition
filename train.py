@@ -105,8 +105,13 @@ def main(argv: list[str] | None = None) -> int:
         from src.training.trainer import train
 
         logger.info("=== Model Training ===")
-        _model, best_acc = train(n_epochs=args.epochs)
+        try:
+            _model, best_acc, metadata = train(n_epochs=args.epochs)
+        except KeyboardInterrupt:
+            logger.info("Training aborted.")
+            return 1
         logger.info("Best validation accuracy: %.2f%%", best_acc * 100)
+        logger.info("Model saved: %s", metadata["model_filename"])
         if best_acc < 0.999:
             logger.warning(
                 "Accuracy target (99.9%) not yet met. "

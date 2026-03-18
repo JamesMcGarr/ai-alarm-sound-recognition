@@ -2,7 +2,7 @@
 inference/listener.py
 ---------------------
 Continuously listens to the microphone and fires ``on_alarm_detected`` when
-the trained AlarmCNN model scores a window at ≥ 99% confidence.
+the trained AlarmCNN model scores a window at ≥ 99.9% confidence.
 
 Nice-to-haves implemented:
   • Every alarm trigger is saved to data/positive_captures/ as a timestamped
