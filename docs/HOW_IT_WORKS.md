@@ -665,6 +665,125 @@ In `listen.py`, creating the `SirenController` is wrapped in a `try/except`. If 
 
 ---
 
+## Section 7.1: When the Actuator Interferes With the Sensor
+
+### The feedback-loop problem
+
+This project has a classic engineering problem: **the actuator interferes with the sensor**.
+
+The microphone (sensor) detects the X-Sense alarm and turns on the siren (actuator). But the siren is deliberately very loud — loud enough to scare off intruders. That loudness completely overwhelms the microphone. It can no longer hear the quiet X-Sense alarm over the deafening siren.
+
+So what happens?
+
+1. Microphone hears the X-Sense alarm → **siren turns ON.**
+2. Siren is so loud the microphone can't hear the X-Sense alarm anymore → model says "no alarm" → **siren turns OFF.**
+3. With the siren off, the microphone can hear again → it picks up the X-Sense alarm → **siren turns ON.**
+4. Repeat.
+
+The result is rapid on-off-on-off oscillation — the siren flickers rather than holding steady. This is not effective as a deterrent.
+
+This is not unique to this project. It appears in many real-world systems where an actuator's output pollutes the sensor's input:
+
+| Domain | Sensor | Actuator | Interference |
+|---|---|---|---|
+| This project | Microphone | Loud siren | Siren drowns out the alarm sound |
+| Audio systems | Microphone | Speaker | Speaker output feeds back into mic (acoustic feedback / "howling") |
+| Heating control | Thermostat | Heater | Heater's heat reaches thermostat before room warms evenly |
+| Robotics | Camera | Headlights | Headlights cause glare in camera image |
+
+The general principle: when the thing you *do* (actuate) corrupts the thing you *measure* (sense), naive closed-loop control breaks down.
+
+### The duty-cycle solution
+
+The fix used in this project is a **duty cycle** — a pattern where the actuator operates in timed pulses rather than continuously.
+
+Instead of keeping the siren on indefinitely (which deafens the microphone forever), the listener:
+
+1. **Detects the alarm** → turns the siren **ON**.
+2. **Holds the siren on** for a fixed duration (default: 5 seconds) — long enough to be effective.
+3. **Turns the siren OFF** → normal listening resumes.
+4. If the X-Sense alarm is still going, the microphone detects it again on the next clean audio window and **re-enters the cycle**.
+5. If the alarm has stopped, the microphone hears silence and **does nothing** — the system is back to passive monitoring.
+
+```
+ ┌──── Alarm detected ◄──────────────────────────┐
+ │                                                │
+ ▼                                                │
+ Siren ON for 5 seconds                           │
+ │  (microphone can't hear alarm — that's OK,     │
+ │   audio windows naturally score < 0.999)       │
+ ▼                                                │
+ Siren OFF                                        │
+ │                                                │
+ ▼                                                │
+ Normal listening resumes                         │
+ ├── Alarm still audible? ── YES ─────────────────┘
+ └── Alarm stopped? ── NO action, keep listening
+```
+
+The key insight is that **no explicit "gap" or queue-draining is needed**. While the siren is blaring, the sounddevice callback continues pushing audio windows into the queue. Those siren-contaminated windows are processed as usual, but they don't match the X-Sense alarm's acoustic signature — the model scores them well below the 99.9% threshold. They are simply ignored. Once the siren turns off and the microphone can hear normally again, the very next clean window either re-triggers the cycle or doesn't.
+
+This is controlled by a single configurable value:
+
+```bash
+# CLI argument
+python listen.py --siren-on-duration 5
+
+# Or via .env
+SIREN_ON_DURATION=5.0
+```
+
+### Where it lives in the code
+
+[`src/inference/listener.py`](../src/inference/listener.py) — the `run()` method orchestrates the duty cycle:
+
+```python
+for window in self.capture.stream():
+    alarm_detected = self._process_window(window)
+    if alarm_detected and self.siren is not None:
+        self._siren_duty_cycle()
+```
+
+And `_siren_duty_cycle()` is intentionally simple:
+
+```python
+def _siren_duty_cycle(self) -> None:
+    self.siren.turn_on()
+    time.sleep(self.siren_on_duration)
+    self.siren.turn_off()
+```
+
+After `_siren_duty_cycle()` returns, the `for` loop picks up the next audio window from the stream and the cycle either repeats or doesn't — no special logic required.
+
+<details>
+<summary>🔬 Deep Dive: Duty cycles in engineering and alternative approaches</summary>
+
+### Duty cycles
+
+A **duty cycle** is the fraction of time a system is in an active state. In electronics, a 50% duty cycle means a signal is on half the time and off half the time (like a square wave). PWM (Pulse-Width Modulation) — used in LED dimming, motor speed control, and power supplies — is a direct application of duty cycling.
+
+In this project, with a 5-second on-duration and roughly 1 second for detection after the siren turns off, the effective duty cycle is approximately 5/6 ≈ 83%. The siren is sounding 83% of the time during an active alarm — more than enough to be effective as a deterrent.
+
+### Alternative approaches considered
+
+**1. Acoustic Echo Cancellation (AEC)**
+Professional audio systems (speakerphones, hearing aids) use AEC algorithms to subtract the known speaker output from the microphone input. This would let the microphone "hear through" the siren. However, AEC requires precise knowledge of the siren's audio signal and the room's acoustic response — far more complexity than this project warrants.
+
+**2. Separate frequency bands**
+If the siren operated exclusively in frequencies the X-Sense alarm doesn't use, a bandpass filter could isolate the alarm. In practice, both the siren and the X-Sense alarm cover broad frequency ranges that overlap significantly.
+
+**3. A second microphone further from the siren**
+Physical isolation can reduce interference, but adds hardware complexity and still doesn't fully solve the problem — the siren is designed to fill the entire space with sound.
+
+**4. Fixed minimum on-time with hysteresis**
+Rather than a simple timer, you could require N consecutive "no alarm" windows before turning the siren off (hysteresis). This was considered but adds complexity without clear benefit — the duty-cycle approach is simpler and equally effective because the normal listening loop already provides the checking mechanism.
+
+The duty-cycle approach was chosen for its simplicity: one parameter, four lines of code, no signal processing, and it leverages the existing ML model's natural inability to confuse siren noise with the X-Sense alarm.
+
+</details>
+
+---
+
 ## Section 8: The Continuous Improvement Loop
 
 ### AI models are not "finished"
@@ -752,12 +871,15 @@ AlarmCNN.predict_proba()                       src/training/model.py
 Threshold comparison                           src/inference/listener.py
   │  confidence >= 0.999?
   ├── YES → on_alarm_detected()
-  │           └─ SirenController.turn_on()    src/siren/controller.py
-  │                └─ TapoDevice.on()          src/siren/tapo_client.py
-  │                     └─ HTTP to Tapo P110
-  │           └─ Save .wav to data/positive_captures/
+  │           ├─ Save .wav to data/positive_captures/
+  │           └─ Siren duty cycle (if configured):
+  │                SirenController.turn_on()   src/siren/controller.py
+  │                  └─ TapoDevice.on()        src/siren/tapo_client.py
+  │                       └─ HTTP to Tapo P110
+  │                sleep(siren_on_duration)
+  │                SirenController.turn_off()
+  │                  └─ resume listening
   └── NO  → on_alarm_not_detected()
-              └─ SirenController.turn_off()
               └─ If interesting → save to data/negative_captures/
 ```
 
@@ -780,6 +902,7 @@ Threshold comparison                           src/inference/listener.py
 | Model checkpointing | [src/training/trainer.py](../src/training/trainer.py) |
 | Inference with `torch.no_grad()` | [src/training/model.py](../src/training/model.py) — `predict_proba()` |
 | Confidence thresholding | [src/inference/listener.py](../src/inference/listener.py) |
+| Actuator-sensor interference / duty cycle | [src/inference/listener.py](../src/inference/listener.py) — `_siren_duty_cycle()` |
 | Hard-negative mining | [src/inference/listener.py](../src/inference/listener.py) |
 | Real-time streaming inference | [src/inference/listener.py](../src/inference/listener.py) |
 | Production deployment (systemd) | [install.sh](../install.sh) |
@@ -816,6 +939,7 @@ Threshold comparison                           src/inference/listener.py
 | **CNN (Convolutional Neural Network)** | A type of neural network designed for grid-structured inputs (images, spectrograms) using sliding filter operations |
 | **Concept drift** | When the real-world data distribution changes after a model is deployed, degrading its performance |
 | **Dataset** | A collection of labelled examples used for training and evaluation |
+| **Duty cycle** | Operating an actuator in timed on/off pulses rather than continuously, often to allow a sensor to take readings between pulses |
 | **DataLoader** | A PyTorch utility that batches, shuffles, and feeds a Dataset to the training loop |
 | **Dropout** | A regularisation technique that randomly disables neurons during training to prevent overfitting |
 | **Epoch** | One complete pass through the entire training dataset |

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -66,12 +67,12 @@ def _rms(audio: np.ndarray) -> float:
 def on_alarm_detected(
     audio_window: np.ndarray,
     confidence: float,
-    siren: "SirenController | None" = None,
 ) -> None:
     """
     Called every time the model detects the X-Sense alarm sound.
 
-    Turns the Tapo siren plug ON (only if it isn't already on).
+    Handles logging only.  Siren control is managed by the duty-cycle
+    logic in :meth:`AlarmListener.run`.
 
     Parameters
     ----------
@@ -79,23 +80,19 @@ def on_alarm_detected(
         The raw audio frame that triggered the detection.
     confidence:
         The model's output probability (≥ DETECTION_THRESHOLD).
-    siren:
-        Optional SirenController instance.  If provided, turns the siren on.
     """
     logger.info("🔔  ALARM DETECTED  (confidence=%.4f)", confidence)
-    if siren is not None:
-        siren.turn_on()
 
 
 def on_alarm_not_detected(
     audio_window: np.ndarray,
     confidence: float,
-    siren: "SirenController | None" = None,
 ) -> None:
     """
     Called for every audio window that does NOT trigger an alarm detection.
 
-    Turns the Tapo siren plug OFF (only if it isn't already off).
+    Handles logging only.  Siren control is managed by the duty-cycle
+    logic in :meth:`AlarmListener.run`.
 
     Parameters
     ----------
@@ -103,11 +100,8 @@ def on_alarm_not_detected(
         The raw audio frame that was analysed.
     confidence:
         The model's output probability (< DETECTION_THRESHOLD).
-    siren:
-        Optional SirenController instance.  If provided, turns the siren off.
     """
-    if siren is not None:
-        siren.turn_off()
+    pass
 
 
 # ── Main listener ─────────────────────────────────────────────────────────────
@@ -129,6 +123,11 @@ class AlarmListener:
     save_negatives:
         Whether to save interesting non-triggering frames to
         ``data/negative_captures/``.
+    siren_on_duration:
+        Seconds the siren stays on per duty-cycle pulse.  The siren is
+        turned on when the alarm is first detected, held for this many
+        seconds, then turned off.  Normal listening resumes automatically;
+        if the alarm is still audible the cycle repeats.
     """
 
     def __init__(
@@ -139,6 +138,7 @@ class AlarmListener:
         save_triggers: bool = True,
         save_negatives: bool = True,
         siren: "SirenController | None" = None,
+        siren_on_duration: float = 5.0,
     ) -> None:
         self.model = load_model(model_path) if model_path else load_model()
         self.capture = AudioCapture(device=device)
@@ -146,6 +146,7 @@ class AlarmListener:
         self.save_triggers = save_triggers
         self.save_negatives = save_negatives
         self.siren = siren
+        self.siren_on_duration = siren_on_duration
 
         if save_triggers:
             POSITIVE_CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -161,26 +162,58 @@ class AlarmListener:
         2. Run the model.
         3. If confidence ≥ threshold → call ``on_alarm_detected`` + optionally save.
         4. Otherwise, if the window has interesting energy → optionally save as negative.
+
+        When the siren is configured the listener uses a **duty-cycle**
+        approach to avoid the siren's own noise preventing detection of
+        the X-Sense alarm:
+
+        1. Alarm detected → turn siren ON.
+        2. Hold siren ON for ``siren_on_duration`` seconds.
+        3. Turn siren OFF and resume normal listening.
+        4. If the alarm is detected again the cycle repeats.
+
+        Audio captured while the siren is blaring will not match the
+        X-Sense alarm signature, so no explicit gap or queue-draining
+        is needed — the model naturally ignores it.
         """
         logger.info("Listening…  (Ctrl+C to stop)")
+        if self.siren is not None:
+            logger.info(
+                "Siren duty-cycle enabled: %.1f s ON per pulse.",
+                self.siren_on_duration,
+            )
         try:
             for window in self.capture.stream():
-                self._process_window(window)
+                alarm_detected = self._process_window(window)
+                if alarm_detected and self.siren is not None:
+                    self._siren_duty_cycle()
         except KeyboardInterrupt:
             logger.info("Listener stopped.")
 
-    def _process_window(self, window: np.ndarray) -> None:
+    def _siren_duty_cycle(self) -> None:
+        """Run one siren duty-cycle pulse: ON → hold → OFF."""
+        logger.info(
+            "⏱  Siren duty-cycle: ON for %.1f s", self.siren_on_duration
+        )
+        self.siren.turn_on()
+        time.sleep(self.siren_on_duration)
+        self.siren.turn_off()
+        logger.info("⏱  Siren duty-cycle: OFF — resuming listening.")
+
+    def _process_window(self, window: np.ndarray) -> bool:
+        """Analyse one audio window.  Returns ``True`` if alarm detected."""
         spec = extract(window)
         confidence = self.model.predict_proba(spec)
 
         if confidence >= self.threshold:
-            on_alarm_detected(window, confidence, siren=self.siren)
+            on_alarm_detected(window, confidence)
             if self.save_triggers:
                 path = POSITIVE_CAPTURES_DIR / f"trigger_{_timestamp()}.wav"
                 _save_wav(window, path)
                 logger.debug("Saved trigger → %s", path.name)
+            return True
         else:
-            on_alarm_not_detected(window, confidence, siren=self.siren)
+            on_alarm_not_detected(window, confidence)
             rms = _rms(window)
             if (
                 self.save_negatives
@@ -193,3 +226,4 @@ class AlarmListener:
                     "Saved interesting negative → %s  (conf=%.3f, rms=%.4f)",
                     path.name, confidence, rms
                 )
+            return False

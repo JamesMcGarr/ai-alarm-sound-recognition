@@ -13,16 +13,22 @@ Options
 -------
 --device INDEX|NAME   sounddevice device index or name fragment.
 --threshold FLOAT     Detection confidence threshold (default: 0.999).
+--siren-on-duration S Seconds the siren stays on per duty-cycle pulse (default: 5.0).
 --no-save-triggers    Do not save triggering frames to data/positive_captures/.
 --no-save-negatives   Do not save interesting non-alarm frames to data/negative_captures/.
 --model PATH          Override path to the trained .pt model file.
 --verbose             Enable DEBUG logging (shows every saved capture).
+
+Environment variables (set in .env or shell)
+--------------------------------------------
+SIREN_ON_DURATION     Fallback default for --siren-on-duration (default: 5.0).
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
@@ -75,6 +81,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=False,
         help="Enable DEBUG-level logging.",
     )
+    p.add_argument(
+        "--siren-on-duration",
+        type=float,
+        default=float(os.environ.get("SIREN_ON_DURATION", 5.0)),
+        metavar="SECONDS",
+        help=(
+            "Seconds the siren stays on per duty-cycle pulse "
+            "(default: $SIREN_ON_DURATION or 5.0)."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -124,11 +140,14 @@ def main(argv: list[str] | None = None) -> int:
         save_triggers=args.save_triggers,
         save_negatives=args.save_negatives,
         siren=siren,
+        siren_on_duration=args.siren_on_duration,
     )
 
     logging.info("Model loaded from %s", model_path)
     logging.info("Detection threshold: %.2f", args.threshold)
     logging.info("Siren control: %s", "enabled" if siren else "disabled")
+    if siren:
+        logging.info("Siren duty-cycle duration: %.1f s", args.siren_on_duration)
     listener.run()
     return 0
 

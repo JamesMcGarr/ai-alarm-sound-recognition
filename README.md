@@ -137,9 +137,21 @@ def on_alarm_detected(audio_window: np.ndarray, confidence: float) -> None:
 | `--device INDEX\|NAME` | sounddevice device index or name fragment |
 | `--threshold FLOAT` | Detection confidence threshold (default: 0.999) |
 | `--model PATH` | Path to a `.pt` model file (default: `models/alarm_model.pt`) |
+| `--siren-on-duration SECONDS` | Seconds siren stays on per duty-cycle pulse (default: 5.0, or `$SIREN_ON_DURATION`) |
 | `--no-save-triggers` | Disable saving alarm triggers to `data/positive_captures/` |
 | `--no-save-negatives` | Disable saving interesting non-alarm frames to `data/negative_captures/` |
 | `--verbose` | Enable DEBUG logging |
+
+#### Siren duty-cycle
+
+When a Tapo smart plug is configured (via `API_USERNAME`, `API_PASSWORD`, `DEVICE_IP_ADDRESS` in `.env`), the siren uses a **duty-cycle** to avoid its own noise masking the X-Sense alarm:
+
+1. Alarm detected → siren turns **ON** for `--siren-on-duration` seconds (default 5).
+2. Siren turns **OFF** and normal listening resumes.
+3. If the alarm is still audible, the next clean audio window re-triggers the cycle.
+4. If the alarm has stopped, the listener continues monitoring silently.
+
+Audio captured while the siren is blaring won't match the X-Sense alarm pattern and is naturally ignored by the model.
 
 ---
 
